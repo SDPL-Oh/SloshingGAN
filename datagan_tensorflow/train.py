@@ -1,53 +1,11 @@
 import numpy as np
 import pandas as pd
-from scipy import stats
 import tensorflow as tf
-import matplotlib.pyplot as plt
 from tqdm import tqdm
 from datetime import datetime
+from data import LoadTfrecord
 from models import Generator, Discriminator
-
-
-# TODO: 위치에 대한 센서 번호가 정해지면 적용할 코드
-# c = tf.sparse.reshape(example['object/class/label'], [-1])
-# c = tf.one_hot(tf.sparse.to_dense(c), depth=10, axis=-1)
-
-class LoadTfrecord:
-    def __init__(self, epochs):
-        self.epochs = epochs
-
-    def read_tfrecord(self, example):
-        tfrecord_format = ({
-            'Index': tf.io.FixedLenFeature((), tf.float32),
-            'Hs': tf.io.VarLenFeature(tf.float32),
-            'Tz': tf.io.VarLenFeature(tf.float32),
-            'Speed': tf.io.VarLenFeature(tf.float32),
-            'Heading': tf.io.VarLenFeature(tf.float32),
-            'Sensor': tf.io.VarLenFeature(tf.float32),
-            'Pressure': tf.io.VarLenFeature(tf.float32)
-        })
-        example = tf.io.parse_single_example(example, tfrecord_format)
-        inputs = tf.sparse.concat(axis=0, sp_inputs=[
-            example['Hs'],
-            example['Tz'],
-            example['Speed'],
-            example['Heading'],
-            example['Sensor']])
-        inputs = tf.sparse.to_dense(inputs)
-        return example['Index'], inputs, example['Pressure']
-
-    def load_data(self, filenames):
-        dataset = tf.data.TFRecordDataset(filenames)
-        dataset = dataset.map(self.read_tfrecord, num_parallel_calls=tf.data.AUTOTUNE)
-        return dataset
-
-    def get_dataset(self, filenames, batch_size, samples, is_training=True):
-        dataset = self.load_data(filenames)
-        if is_training:
-            dataset = dataset.shuffle(samples, reshuffle_each_iteration=False)
-            dataset = dataset.prefetch(buffer_size=tf.data.AUTOTUNE)
-        dataset = dataset.batch(batch_size).repeat(self.epochs)
-        return iter(dataset)
+from statistics import WeibullDistribution
 
 
 class SloshingGan:
@@ -175,38 +133,20 @@ class SloshingGan:
                 print('Saving Model for epoch {} at {}'.format(epoch, model_save_path))
 
     def test(self, csv_file, inputs):
+        plot_data = WeibullDistribution(self.target_columns)
         data_list = []
         data_info = pd.read_csv(csv_file)
 
         inputs = pd.DataFrame.from_dict(inputs)
-        inputs = self.normalized(inputs, data_info, self.input_columns)
+        inputs = plot_data.normalized(inputs, data_info, self.input_columns)
         self.generator_model = tf.keras.models.load_model(self.model_path + 'models')
 
         for _ in tqdm(range(self.num_gen_data), desc="Generate Data"):
             data = self.predict_step(inputs, 1)
-            data = self.denormalized(data, data_info, self.target_columns)
+            data = plot_data.denormalized(data, data_info, self.target_columns)
             data_list.append(np.array(data)[0])
 
-        plt.scatter(data_list,
-                    stats.exponweib.pdf(data_list, *stats.exponweib.fit(data_list, 1, 1, scale=2, loc=0)),
-                    label='gen')
-        plt.scatter(data_info[self.target_columns][:62],
-                    stats.exponweib.pdf(data_info[self.target_columns][:62],
-                                        *stats.exponweib.fit(data_info[self.target_columns][:62],
-                                                             1, 1, scale=2, loc=0)),
-                    label='exp')
-        plt.legend()
-        plt.show()
+        plot_data.plot_scatter(data_list, data_info)
 
-    def normalized(self, data, standard_data, columns):
-        data_stats = standard_data.describe()
-        data_stats = data_stats.transpose()
-        trans_data = (data - data_stats['min']) / ((data_stats['max']) - data_stats['min'])
-        trans_data = trans_data[columns].fillna(0)
-        return trans_data.astype('float32')
 
-    def denormalized(self, data, standard_data, columns):
-        data_stats = standard_data.describe()
-        data_stats = data_stats.transpose()
-        trans_data = (data * ((data_stats['max'][columns]) - data_stats['min'][columns])) + data_stats['min'][columns]
-        return trans_data
+
