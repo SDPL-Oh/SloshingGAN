@@ -5,11 +5,11 @@ import torch
 from torch.utils.data import Dataset
 
 class PeakData:
-    def __init__(self):
-        self.data_dir = 'data'
-        self.cond_path = 'preprocessing/conditions.csv'
-        self.save_path = 'preprocessing/train.csv'
-        self.data_header = ['Peak Pressure(bar)', 'Time Index', 'Rise Time(sec)', 'Duration Time(sec)']
+    def __init__(self, data_dir, cond_path, save_path, data_header):
+        self.data_dir = data_dir
+        self.cond_path = cond_path
+        self.save_path = save_path
+        self.data_header = data_header
 
     def condition_dat(self):
         return pd.read_csv(self.cond_path)
@@ -23,15 +23,21 @@ class PeakData:
             return None
 
     def read_dat(self):
+        nan_list = []
         concat_dat = pd.DataFrame()
         for case in tqdm(os.listdir(self.data_dir), desc='Concatenate case'):
             for dat in os.listdir(os.path.join(self.data_dir, case)):
                 data = os.path.join(self.data_dir, case, dat)
                 data = pd.read_csv(data, sep="\t", skiprows=1)
+                if data.isnull().values.any():
+                    nan_list.append((case, '/', dat))
+                data = data.dropna(axis=0)
                 data.columns = self.data_header
                 data['No'] = self.extract_num(case, 'case')
                 data['sensor'] = self.extract_num(dat, 'dat')
                 concat_dat = pd.concat([concat_dat, data], ignore_index=True)
+        print(nan_list)
+
         return concat_dat
 
     def concat_cond(self):
@@ -48,7 +54,7 @@ class PeckDataset(Dataset):
     def __init__(self, csv_file, cond_header, output_header, transform=None):
         self.cond_header = cond_header
         self.output_header = output_header
-        self.peak_data = pd.read_csv(csv_file)
+        self.peak_data = csv_file
         self.transform = transform
 
     def __len__(self):
@@ -72,7 +78,7 @@ class PeckDataset(Dataset):
 
 class Normalized(object):
     def __init__(self, csv_file, cond_header):
-        self.peak_data = pd.read_csv(csv_file)
+        self.peak_data = csv_file
         self.cond_header = cond_header
 
     def __call__(self, sample):

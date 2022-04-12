@@ -1,20 +1,19 @@
+import os
+import pandas as pd
 import torch
 from torch.utils.data import DataLoader
-from data_processing import PeakData, PeckDataset, Normalized, ToTensor
+from datagan_pytorch.data_processing import PeckDataset, Normalized, ToTensor
 
 import torch.optim as optim
 import torchvision.transforms as transforms
 
 latent_size = 16
 hidden_size = 256
-num_epochs = 10
-batch_size = 10
 lr = 0.0002
 beta1 = 0.5
-num_gpu = 2
 cond_header = ['Hs', 'Tz', 'Speed', 'Heading', 'sensor']
 output_header = ['Peak Pressure(bar)']
-device = torch.device("cuda:0" if (torch.cuda.is_available() and num_gpu > 0) else "cpu")
+
 
 # TODO
 #   1. gpu 설정
@@ -23,22 +22,26 @@ device = torch.device("cuda:0" if (torch.cuda.is_available() and num_gpu > 0) el
 #   4. 전체 데이터 사용
 
 class Dataset:
-    def __init__(self):
-        self.csv_file = 'preprocessing/train.csv'
+    def __init__(self, batch_size, num_workers):
+        self.batch_size = batch_size
+        self.num_workers = num_workers
+        self.csv_file = pd.read_csv('../preprocessing/train.csv')
 
     def load_dataset(self):
         peak_dataset = PeckDataset(csv_file=self.csv_file,
                                    cond_header=cond_header,
                                    output_header=output_header,
-                                   transform=transforms.Compose([Normalized(self.csv_file, cond_header),
-                                                                 ToTensor()]))
+                                   # transform=transforms.Compose([Normalized(self.csv_file, cond_header),
+                                   #                               ToTensor()]))
+                                   transform=transforms.Compose([ToTensor()]))
 
         data_loader = DataLoader(dataset=peak_dataset,
-                                 batch_size=batch_size,
+                                 num_workers=self.num_workers,
+                                 batch_size=self.batch_size,
                                  shuffle=False)
 
-        real_batch = next(iter(data_loader))
-        print("Print sample data: ", real_batch)
+        # real_batch = next(iter(data_loader))
+        # print("Print sample data: ", real_batch)
 
         return data_loader
 
@@ -87,6 +90,10 @@ class Discriminator(torch.nn.Module):
 
 
 class BuildModel:
+    def __init__(self, num_gpu, device):
+        self.num_gpu = num_gpu
+        self.device = device
+
     def weights_init(self, m):
         classname = m.__class__.__name__
         if classname.find('Linear') != -1:
@@ -96,13 +103,13 @@ class BuildModel:
             torch.nn.init.constant_(m.bias.data, 0)
 
     def apply_init(self):
-        gen = Generator(num_gpu).to(device)
-        if (device.type == 'cuda') and (num_gpu > 1):
-            gen = torch.nn.DataParallel(gen, list(range(num_gpu)))
+        gen = Generator(self.num_gpu).to(self.device)
+        # if (self.device.type == 'cuda') and (self.num_gpu > 1):
+        # gen = torch.nn.DataParallel(gen, list(range(self.num_gpu)))
         gen.apply(self.weights_init)
-        dis = Discriminator(num_gpu).to(device)
-        if (device.type == 'cuda') and (num_gpu > 1):
-            dis = torch.nn.DataParallel(dis, list(range(num_gpu)))
+        dis = Discriminator(self.num_gpu).to(self.device)
+        # if (self.device.type == 'cuda') and (self.num_gpu > 1):
+        # dis = torch.nn.DataParallel(dis, list(range(self.num_gpu)))
         dis.apply(self.weights_init)
 
         print("########## Models Summary Start ##########")
@@ -114,16 +121,23 @@ class BuildModel:
 
 
 class Training:
-    def __init__(self):
-        dataset = Dataset()
-        models = BuildModel()
+    def __init__(self, num_gpu, device, num_epochs, batch_size, num_workers):
+        self.num_gpu = num_gpu
+        self.device = device
+        self.num_epochs = num_epochs
+        self.batch_size = batch_size
+        self.num_workers = num_workers
+        dataset = Dataset(self.num_epochs, num_workers)
         self.data_loader = dataset.load_dataset()
+        models = BuildModel(self.num_gpu, self.device)
         self.gen, self.dis = models.apply_init()
+        self.save_path = '../weight'
+
 
     def train(self):
-        peak_list = []
-        G_losses = []
-        D_losses = []
+        # peak_list = []
+        # G_losses = []
+        # D_losses = []
         criterion = torch.nn.BCELoss()
         iters = 0
         real_label = 1.
@@ -131,19 +145,21 @@ class Training:
         optimizerD = optim.Adam(self.dis.parameters(), lr=lr, betas=(beta1, 0.999))
         optimizerG = optim.Adam(self.gen.parameters(), lr=lr, betas=(beta1, 0.999))
 
+        self.csv_file = pd.read_csv('../preprocessing/train.csv')
+
         print("Starting Training Loop...")
-        for epoch in range(num_epochs):
+        for epoch in range(self.num_epochs):
             for i, data in enumerate(self.data_loader, 0):
                 self.dis.zero_grad()
-                real = data['results'].to(device)
-                label = torch.full((real.size(0), ), real_label, dtype=torch.float, device=device)
+                real = data['results'].to(self.device)
+                label = torch.full((real.size(0), ), real_label, dtype=torch.float, device=self.device)
                 output = self.dis(real).view(-1)
                 errD_real = criterion(output, label)
                 errD_real.backward()
                 D_x = output.mean().item()
 
-                noise = torch.randn((real.size(0), latent_size), device=device)
-                input_cond = torch.cat([data['conditions'].to(device), noise], dim=1)
+                noise = torch.randn((real.size(0), latent_size), device=self.device)
+                input_cond = torch.cat([data['conditions'].to(self.device), noise], dim=1)
                 fake = self.gen(input_cond)
                 label.fill_(fake_label)
                 output = self.dis(fake.detach()).view(-1)
@@ -163,20 +179,26 @@ class Training:
 
                 if i % 50 == 0:
                     print('[%d/%d][%d/%d]\tLoss_D: %.4f\tLoss_G: %.4f\tD(x): %.4f\tD(G(z)): %.4f / %.4f'
-                          % (epoch, num_epochs, i, len(self.data_loader),
+                          % (epoch, self.num_epochs, i, len(self.data_loader),
                              errD.item(), errG.item(), D_x, D_G_z1, D_G_z2))
 
-                G_losses.append(errG.item())
-                D_losses.append(errD.item())
+                # G_losses.append(errG.item())
+                # D_losses.append(errD.item())
 
-                fixed_noise = torch.randn((real.size(0), latent_size), device=device)
-                fixed_cond = torch.cat([data['conditions'].to(device), fixed_noise], dim=1)
-                if (iters % 500 == 0) or ((epoch == num_epochs - 1) and (i == len(self.data_loader) - 1)):
-                    with torch.no_grad():
-                        fake = self.gen(fixed_cond).detach().cpu()
-                    peak_list.append(fake)
+                # fixed_noise = torch.randn((real.size(0), latent_size), device=self.device)
+                # fixed_cond = torch.cat([data['conditions'].to(self.device), fixed_noise], dim=1)
+                # if (iters % 500 == 0) or ((epoch == self.num_epochs - 1) and (i == len(data_loader) - 1)):
+                #     with torch.no_grad():
+                #         fake = self.gen(fixed_cond).detach().cpu()
+                #     peak_list.append(fake)
 
                 iters += 1
 
-a = Training()
-a.train()
+            torch.save({
+                'epoch': self.num_epochs,
+                'model_G_state_dict': self.gen.state_dict(),
+                'model_D_state_dict': self.dis.state_dict(),
+                'optimizer_G_state_dict': optimizerG.state_dict(),
+                'optimizer_D_state_dict': optimizerD.state_dict()},
+                os.path.join(self.save_path, 'model_weights.pth'))
+
