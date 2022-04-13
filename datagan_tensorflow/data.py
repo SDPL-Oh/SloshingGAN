@@ -76,15 +76,15 @@ class GenerateTfrecord:
             'tz': self.float_feature(data.tz),
             'speed': self.float_feature(data.speed),
             'heading': self.float_feature(data.heading),
-            'loc': self.float_feature(data.loc),
-            'Pressure': self.float_feature(data.pressure),
+            'sensor': self.float_feature(data.loc),
+            'pressure': self.float_feature(data.pressure),
         }
         tf_example = tf.train.Example(features=tf.train.Features(feature=label_dict))
         return tf_example
 
     def create_tfrecord(self, mode):
         writer = tf.io.TFRecordWriter(os.path.join(self.save_dir + "{}.record".format(mode)))
-        data_info = pd.read_csv(self.csv_file)
+        data_info = pd.read_csv(self.csv_file)[:3000]
         data_info = self.normalized(data_info, data_info).fillna(0)
         for data in tqdm(data_info.itertuples(), desc='generate tfrecord values', total=len(data_info)):
             tf_example = self.create_tfvalue(data)
@@ -110,7 +110,7 @@ class LoadTfrecord:
             'tz': tf.io.VarLenFeature(tf.float32),
             'speed': tf.io.VarLenFeature(tf.float32),
             'heading': tf.io.VarLenFeature(tf.float32),
-            'loc': tf.io.VarLenFeature(tf.float32),
+            'sensor': tf.io.VarLenFeature(tf.float32),
             'pressure': tf.io.VarLenFeature(tf.float32)
         })
         example = tf.io.parse_single_example(example, tfrecord_format)
@@ -119,13 +119,14 @@ class LoadTfrecord:
             example['tz'],
             example['speed'],
             example['heading'],
-            example['loc']])
+            example['sensor']])
         inputs = tf.sparse.to_dense(inputs)
         return example['Index'], inputs, example['pressure']
 
     def load_data(self, filenames):
         dataset = tf.data.TFRecordDataset(filenames)
-        dataset = dataset.map(self.read_tfrecord, num_parallel_calls=tf.data.AUTOTUNE)
+        dataset = dataset.map(self.read_tfrecord,
+                              num_parallel_calls=tf.data.experimental.AUTOTUNE)
         return dataset
 
     def get_dataset(self, filenames, batch_size, samples, is_training=True):
@@ -135,3 +136,12 @@ class LoadTfrecord:
             dataset = dataset.prefetch(buffer_size=tf.data.AUTOTUNE)
         dataset = dataset.batch(batch_size).repeat(self.epochs)
         return iter(dataset)
+
+    def get_dataset_next(self, filenames, batch_size):
+        dataset = tf.data.TFRecordDataset(filenames)
+        dataset = dataset.map(self.read_tfrecord,
+                              num_parallel_calls=tf.data.experimental.AUTOTUNE)
+        dataset = dataset.shuffle(10000)
+        dataset = dataset.batch(batch_size, drop_remainder=True)
+        dataset = dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
+        return dataset

@@ -123,11 +123,11 @@ class SloshingGan:
                     train_summary_writer.flush()
                     total_step += 200
 
-            if (epoch + 1) % 5 == 0:
+            if (epoch + 1) % 2 == 0:
                 ckpt_save_path = self.ckpt_manager.save()
                 print('Saving checkpoint for epoch {} at {}'.format(epoch, ckpt_save_path))
 
-            if (epoch + 1) % 15 == 0:
+            if (epoch + 1) % 5 == 0:
                 model_save_path = self.model_path + 'models'
                 self.generator.save(model_save_path)
                 print('Saving Model for epoch {} at {}'.format(epoch, model_save_path))
