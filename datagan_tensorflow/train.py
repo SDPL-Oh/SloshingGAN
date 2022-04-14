@@ -132,12 +132,12 @@ class SloshingGan:
                 self.generator.save(model_save_path)
                 print('Saving Model for epoch {} at {}'.format(epoch, model_save_path))
 
-    def test(self, csv_file, inputs):
+    def test(self, csv_file, conditions):
         plot_data = WeibullDistribution(self.target_columns)
         data_list = []
         data_info = pd.read_csv(csv_file)
 
-        inputs = pd.DataFrame.from_dict(inputs)
+        inputs = pd.DataFrame.from_dict(conditions)
         inputs = plot_data.normalized(inputs, data_info, self.input_columns)
         self.generator_model = tf.keras.models.load_model(self.model_path + 'models')
 

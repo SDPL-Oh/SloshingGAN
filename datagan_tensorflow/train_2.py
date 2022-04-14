@@ -72,12 +72,12 @@ class SloshingGan(tf.keras.Model):
         return {"gen_loss": gen_loss}
 
     def predict_step(self, tf_data):
-        index, inputs, outputs = tf_data
+        inputs = tf_data
         batch_size = tf.shape(inputs)[0]
         noise = tf.random.normal([batch_size, self.latent])
         inputs = tf.concat([inputs, noise], -1)
-        predict_vector = self.generator_model(inputs, training=False)
-        return {"predict_output": predict_vector, "index": index, "inputs": inputs}
+        predict_vector = self.gen(inputs, training=False)
+        return {"predict_output": predict_vector}
 
 
 class Algorithm:
@@ -143,3 +143,23 @@ class Algorithm:
 
         gen.save(self.model_path + 'gen/')
         disc.save(self.model_path + 'disc/')
+
+    def test(self, csv_file,  conditions):
+        gen = tf.keras.models.load_model(self.model_path + 'gen/')
+        disc = tf.keras.models.load_model(self.model_path + 'disc/')
+        models = SloshingGan(gen, disc, self.latent, self.num_gen_data)
+        plot_data = WeibullDistribution(self.target_columns)
+
+        inputs_list = pd.DataFrame()
+        data_info = pd.read_csv(csv_file)
+        inputs = pd.DataFrame.from_dict(conditions)
+        inputs = plot_data.normalized(inputs, data_info, self.input_columns)
+        for idx in range(self.num_gen_data):
+            inputs_list = pd.concat([inputs_list, inputs], ignore_index=True)
+
+        data = models.predict(inputs_list)['predict_output']
+        data = pd.DataFrame(data, columns=self.target_columns)
+        data = plot_data.denormalized(data, data_info, self.target_columns)
+
+        raw_data = plot_data.extract_dat(data_info, conditions)
+        plot_data.plot_weibull_scipy(data[self.target_columns[0]][:], raw_data, conditions)

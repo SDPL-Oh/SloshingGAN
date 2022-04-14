@@ -1,7 +1,6 @@
 import os
 from data import GenerateTfrecord, GenerateCSV
-from train import SloshingGan
-from train_2 import Algorithm
+
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 here = os.path.dirname(os.path.abspath(__file__))
@@ -12,12 +11,12 @@ HParams = {
     'latent': 16,
     'samples': 3900000,
     'batch': 512,
-    'epochs': 10,
+    'epochs': 100,
     'generator_lr': 0.0003,
     'discriminator_lr': 0.0003,
     'decay_steps': 20000,
     'decay_rate': 0.96,
-    'num_gen_data': 100,
+    'num_gen_data': 1000,
     'model_path': 'F:/SloshingProject/weight/',
     'logs_path': 'F:/SloshingProject/logs/',
     'train_data': 'F:/SloshingProject/preprocessing/train_sensor.record',
@@ -36,7 +35,7 @@ conditions = {
     'tz': [6.5],
     'speed': [5],
     'heading': [120],
-    'sensor': [1]
+    'sensor': [1008]
 }
 
 def main():
@@ -49,15 +48,16 @@ def main():
     # sloshing_data.create_tfrecord('train_temp')
 
     ################### 학습 ###################
+    # from train import SloshingGan
     # sloshing_gan = SloshingGan(HParams)
     # sloshing_gan.train(profiler=False)
-
-    ################### 생성 ###################
     # sloshing_gan.test(csv_file, conditions)
 
     ################### 학습 ###################
+    from train_2 import Algorithm
     sloshing_gan = Algorithm(HParams)
     sloshing_gan.train()
+    # sloshing_gan.test(csv_file, conditions)
 
 if __name__ == '__main__':
     main()
