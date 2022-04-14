@@ -35,7 +35,7 @@ conditions = {
     'tz': [6.5],
     'speed': [5],
     'heading': [120],
-    'sensor': [1008]
+    'sensor': [1]
 }
 
 def main():
@@ -44,8 +44,8 @@ def main():
     # dsme_data.save_csv()
 
     ################## Tfrecord 생성 ###################
-    # sloshing_data = GenerateTfrecord(csv_file, save_dir)
-    # sloshing_data.create_tfrecord('train_temp')
+    sloshing_data = GenerateTfrecord(csv_file, save_dir)
+    sloshing_data.create_tfrecord('train_dsme')
 
     ################### 학습 ###################
     # from train import SloshingGan
@@ -54,9 +54,9 @@ def main():
     # sloshing_gan.test(csv_file, conditions)
 
     ################### 학습 ###################
-    from train_2 import Algorithm
-    sloshing_gan = Algorithm(HParams)
-    sloshing_gan.train()
+    # from train_2 import Algorithm
+    # sloshing_gan = Algorithm(HParams)
+    # sloshing_gan.train()
     # sloshing_gan.test(csv_file, conditions)
 
 if __name__ == '__main__':

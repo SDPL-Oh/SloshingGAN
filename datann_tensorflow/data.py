@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 import tensorflow as tf
-
+from scipy.stats import weibull_min
 
 class GenerateCSV:
     def __init__(self, data_dir, cond_path, save_path):
@@ -28,6 +28,11 @@ class GenerateCSV:
             sensor = int(pd.read_csv(dat_path, sep="\t").columns[1])
             dat = pd.read_csv(dat_path, sep="\t", skiprows=1)
             dat.columns = self.data_header
+            if not dat.empty:
+                shape, location, scale = weibull_min.fit(dat['pressure'][:], method="MM")
+                dat['shape'] = shape
+                dat['location'] = location
+                dat['scale'] = scale
             dat['sensor'] = sensor
             dat['exp'] = exp
             dat['filling'] = filling
@@ -76,9 +81,12 @@ class GenerateTfrecord:
             'tz': self.float_feature(data.tz),
             'speed': self.float_feature(data.speed),
             'heading': self.float_feature(data.heading),
-            'sensor': self.float_feature(data.sensor),
             'loc': self.float_feature(data.loc),
+            'sensor': self.float_feature(data.sensor),
             'pressure': self.float_feature(data.pressure),
+            'shape': self.float_feature(data.shape),
+            'location': self.float_feature(data.location),
+            'scale': self.float_feature(data.scale),
         }
         tf_example = tf.train.Example(features=tf.train.Features(feature=label_dict))
         return tf_example
@@ -111,9 +119,12 @@ class LoadTfrecord:
             'tz': tf.io.VarLenFeature(tf.float32),
             'speed': tf.io.VarLenFeature(tf.float32),
             'heading': tf.io.VarLenFeature(tf.float32),
+            'ioc': tf.io.VarLenFeature(tf.float32),
             'sensor': tf.io.VarLenFeature(tf.float32),
-            'loc': tf.io.VarLenFeature(tf.float32),
-            'pressure': tf.io.VarLenFeature(tf.float32)
+            'pressure': tf.io.VarLenFeature(tf.float32),
+            'shape': tf.io.VarLenFeature(tf.float32),
+            'location': tf.io.VarLenFeature(tf.float32),
+            'scale': tf.io.VarLenFeature(tf.float32)
         })
         example = tf.io.parse_single_example(example, tfrecord_format)
         inputs = tf.sparse.concat(axis=0, sp_inputs=[
@@ -121,9 +132,14 @@ class LoadTfrecord:
             example['tz'],
             example['speed'],
             example['heading'],
-            example['loc']])
+            example['sensor']])
         inputs = tf.sparse.to_dense(inputs)
-        return example['Index'], inputs, example['pressure']
+        outputs = tf.sparse.concat(axis=0, sp_inputs=[
+            example['shape'],
+            example['location'],
+            example['scale']])
+        outputs = tf.sparse.to_dense(outputs)
+        return example['Index'], inputs, outputs
 
     def load_data(self, filenames):
         dataset = tf.data.TFRecordDataset(filenames)
@@ -131,15 +147,7 @@ class LoadTfrecord:
                               num_parallel_calls=tf.data.experimental.AUTOTUNE)
         return dataset
 
-    def get_dataset(self, filenames, batch_size, samples, is_training=True):
-        dataset = self.load_data(filenames)
-        if is_training:
-            dataset = dataset.shuffle(samples, reshuffle_each_iteration=False)
-            dataset = dataset.prefetch(buffer_size=tf.data.AUTOTUNE)
-        dataset = dataset.batch(batch_size).repeat(self.epochs)
-        return iter(dataset)
-
-    def get_dataset_next(self, filenames, batch_size):
+    def get_dataset(self, filenames, batch_size):
         dataset = tf.data.TFRecordDataset(filenames)
         dataset = dataset.map(self.read_tfrecord,
                               num_parallel_calls=tf.data.experimental.AUTOTUNE)
@@ -147,3 +155,4 @@ class LoadTfrecord:
         dataset = dataset.batch(batch_size, drop_remainder=True)
         dataset = dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
         return dataset
+
