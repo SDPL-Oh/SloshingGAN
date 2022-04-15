@@ -85,7 +85,7 @@ class GenerateTfrecord:
 
     def create_tfrecord(self, mode):
         writer = tf.io.TFRecordWriter(os.path.join(self.save_dir + "{}.record".format(mode)))
-        data_info = pd.read_csv(self.csv_file)
+        data_info = pd.read_csv(self.csv_file)[:3000]
         data_info = self.normalized(data_info, data_info).fillna(0)
         for data in tqdm(data_info.itertuples(), desc='generate tfrecord values', total=len(data_info)):
             tf_example = self.create_tfvalue(data)

@@ -1,4 +1,5 @@
 import numpy as np
+import os
 import pandas as pd
 import tensorflow as tf
 from tqdm import tqdm
@@ -79,6 +80,23 @@ class SloshingGan(tf.keras.Model):
         predict_vector = self.gen(inputs, training=False)
         return {"predict_output": predict_vector}
 
+class CheckCallback(tf.keras.callbacks.Callback):
+    def __init__(self, checkpoint, model_path, num_epoch):
+        self.model_path = model_path
+        self.checkpoint = checkpoint
+        self.num_epoch = num_epoch
+
+    def on_train_begin(self, logs=None):
+        self.ckpt_manager = tf.train.CheckpointManager(self.checkpoint, self.model_path, max_to_keep=5)
+        if self.ckpt_manager.latest_checkpoint:
+            self.checkpoint.restore(self.ckpt_manager.latest_checkpoint)
+            print('Latest checkpoint restored.')
+
+    def on_epoch_end(self, epoch, logs=None):
+        if (epoch + 1) % self.num_epoch == 0:
+            self.ckpt_save_path = self.ckpt_manager.save()
+            print('\n saving model to {}'.format(self.model_path))
+
 
 class Algorithm:
     def __init__(self, hparams):
@@ -99,37 +117,35 @@ class Algorithm:
         self.test_data = hparams['test_data']
         self.input_columns = hparams['input_columns']
         self.target_columns = hparams['target_columns']
-
         self.global_batch_size = (self.batch * mirrored_strategy.num_replicas_in_sync)
 
     def callbacks(self):
         tensorboard_cb = tf.keras.callbacks.TensorBoard(
-            self.logs_path, histogram_freq=100
+            self.logs_path + datetime.now().strftime("%Y%m%d-%H%M%S"), histogram_freq=100
         )
-        checkpoint_cb = tf.keras.callbacks.ModelCheckpoint(
-            filepath=self.model_path,
-            save_weights_only=True,
-            verbose=1,
-            save_freq=5000)
-        return tensorboard_cb, checkpoint_cb
+        return tensorboard_cb
 
     def train(self):
         next_batch = LoadTfrecord(self.epochs)
         train_dataset = next_batch.get_dataset_next(self.train_data, self.global_batch_size)
         test_dataset = next_batch.get_dataset_next(self.test_data, self.global_batch_size)
 
+
         with mirrored_strategy.scope():
             gen = Generator(self.input_size, self.latent, self.output_size)
             disc = Discriminator(self.output_size, 1)
-            ###################### load model ######################
-            # gen = tf.keras.models.load_model(self.gen_path)
-            # disc = tf.keras.models.load_model(self.disc_path)
+            gen_opt = tf.keras.optimizers.Adam(learning_rate=self.gen_lr)
+            disc_opt = tf.keras.optimizers.Adam(learning_rate=self.gen_lr)
+            checkpoint = tf.train.Checkpoint(generator_optimizer=gen_opt,
+                                             discriminator_optimizer=disc_opt,
+                                             generator=gen,
+                                             discriminator=disc)
             ########################################################
             models = SloshingGan(gen, disc, self.latent, self.global_batch_size)
 
             models.compile(
-                gen_opt=tf.keras.optimizers.Adam(learning_rate=self.gen_lr),
-                disc_opt=tf.keras.optimizers.Adam(learning_rate=self.disc_lr),
+                gen_opt=gen_opt,
+                disc_opt=disc_opt,
                 loss_fn=tf.keras.losses.BinaryCrossentropy(from_logits=True,
                                                            reduction=tf.keras.losses.Reduction.NONE)
             )
@@ -138,7 +154,7 @@ class Algorithm:
             train_dataset,
             epochs=self.epochs,
             validation_data=test_dataset,
-            callbacks=[self.callbacks()]
+            callbacks=[self.callbacks(), CheckCallback(checkpoint, self.model_path, 5)]
         )
 
         gen.save(self.model_path + 'gen/')
