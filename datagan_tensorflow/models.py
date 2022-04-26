@@ -6,10 +6,10 @@ class Generator(tf.keras.Model):
         self.logic = tf.keras.Sequential(
             [
                 tf.keras.Input(shape=(input_size+latent,)),
-                tf.keras.layers.Dense(20),
+                tf.keras.layers.Dense(25),
                 tf.keras.layers.BatchNormalization(),
                 tf.keras.layers.ReLU(),
-                tf.keras.layers.Dense(10),
+                tf.keras.layers.Dense(15),
                 tf.keras.layers.BatchNormalization(),
                 tf.keras.layers.ReLU(),
                 tf.keras.layers.Dense(5),

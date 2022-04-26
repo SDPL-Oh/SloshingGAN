@@ -100,8 +100,8 @@ class CheckCallback(tf.keras.callbacks.Callback):
 
 class Algorithm:
     def __init__(self, hparams):
-        self.input_size = hparams['input_size']
-        self.output_size = hparams['output_size']
+        self.input_size = len(hparams['input_columns'])
+        self.output_size = len(hparams['target_columns'])
         self.latent = hparams['latent']
         self.samples = hparams['samples']
         self.batch = hparams['batch']
@@ -126,7 +126,7 @@ class Algorithm:
         return tensorboard_cb
 
     def train(self):
-        next_batch = LoadTfrecord(self.epochs)
+        next_batch = LoadTfrecord(self.epochs, self.input_columns)
         train_dataset = next_batch.get_dataset_next(self.train_data, self.global_batch_size)
         test_dataset = next_batch.get_dataset_next(self.test_data, self.global_batch_size)
 
@@ -168,14 +168,44 @@ class Algorithm:
 
         inputs_list = pd.DataFrame()
         data_info = pd.read_csv(csv_file)
-        inputs = pd.DataFrame.from_dict(conditions)
-        inputs = plot_data.normalized(inputs, data_info, self.input_columns)
-        for idx in range(self.num_gen_data):
-            inputs_list = pd.concat([inputs_list, inputs], ignore_index=True)
+        if isinstance(conditions, dict):
+            inputs = pd.DataFrame.from_dict(conditions)
+        else:
+            inputs = pd.read_csv(conditions)
+
+        inputs_norm = plot_data.normalized(inputs, data_info, self.input_columns)
+        for dat_idx in range(len(inputs_norm)):
+            for idx in range(self.num_gen_data):
+                inputs_list = pd.concat([inputs_list, inputs_norm.iloc[dat_idx:dat_idx+1]], ignore_index=True)
+        print(inputs_list.tail())
 
         data = models.predict(inputs_list)['predict_output']
         data = pd.DataFrame(data, columns=self.target_columns)
         data = plot_data.denormalized(data, data_info, self.target_columns)
 
-        raw_data = plot_data.extract_dat(data_info, conditions)
-        plot_data.plot_weibull_scipy(data[self.target_columns[0]][:], raw_data, conditions)
+        p_df = pd.DataFrame()
+        for dat_idx in tqdm(range(len(inputs))):
+            raw_data = plot_data.extract_dat(data_info,
+                                             inputs.iloc[dat_idx:dat_idx+1].reset_index(),
+                                             self.input_columns)
+
+            try:
+                parameter = plot_data.plot_weibull_scipy(
+                    data[self.target_columns[0]][:],
+                    raw_data,
+                    inputs.iloc[dat_idx:dat_idx+1],
+                    self.logs_path + 'plt/{}'.format(dat_idx))
+
+                p_df = pd.concat(
+                    [p_df,
+                     pd.DataFrame([parameter], columns=['p_shape', 'p_loc', 'p_scale', 'r_shape', 'r_loc', 'r_scale'])
+                     ])
+            except:
+                pass
+
+        p_df.to_csv(self.logs_path + 'plt/{}'.format(datetime.now().strftime("%Y%m%d.csv")), index=False)
+
+
+
+
+

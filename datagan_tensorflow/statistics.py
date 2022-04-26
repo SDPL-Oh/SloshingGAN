@@ -1,3 +1,4 @@
+import os
 import math
 import numpy as np
 from scipy.stats import exponweib, weibull_min
@@ -34,27 +35,31 @@ class WeibullDistribution:
         plt.legend()
         plt.show()
 
-    def plot_weibull_scipy(self, data, raw_data, conditions):
-        shape, loc, scale = weibull_min.fit(data, method="MM")
-        data = data[data > scale]
+    def plot_weibull_scipy(self, data, raw_data, conditions, save_path):
+        p_shape, p_loc, p_scale = weibull_min.fit(data, method="MM")
+        data = data[data > p_scale]
         plt.scatter(data,
-                    1-weibull_min.cdf(x=data, c=shape, loc=loc, scale=scale),
+                    1-weibull_min.cdf(x=data, c=p_shape, loc=p_loc, scale=p_scale),
                     color='r',
                     label='gen')
 
-        shape, loc, scale = weibull_min.fit(raw_data, method="MM")
-        raw_data = raw_data[raw_data > scale]
+        r_shape, r_loc, r_scale = weibull_min.fit(raw_data, method="MM")
+        raw_data = raw_data[raw_data > r_scale]
         plt.scatter(raw_data,
-                    1-weibull_min.cdf(x=raw_data, c=shape, loc=loc, scale=scale),
+                    1-weibull_min.cdf(x=raw_data, c=r_shape, loc=r_loc, scale=r_scale),
                     color='b',
                     label='exp')
-        plt.title('hz{}, tz{}, sp{}, hd{}, sensor{}'.format(*conditions.values()))
+
+        plt.title(conditions.values[0])
         plt.yscale('log')
         plt.xlabel('Pressure')
         plt.ylabel('Probability of exceedance')
         plt.axis([0, 0.5, 0.00001, 1])
         plt.legend()
-        plt.show()
+        # plt.show()
+        plt.savefig(save_path + '.jpg')
+        plt.clf()
+        return [p_shape, p_loc, p_scale, r_shape, r_loc, r_scale]
 
     def parameters(self, data):
         peak_press_lst = data
@@ -115,10 +120,10 @@ class WeibullDistribution:
         plt.legend()
         plt.show()
 
-    def extract_dat(self, df, conditions):
-        condi = (df['hs'] == conditions['hs'][0]) \
-                & (df['tz'] == conditions['tz'][0]) \
-                & (df['speed'] == conditions['speed'][0]) \
-                & (df['heading'] == conditions['heading'][0]) \
-                & (df['sensor'] == conditions['sensor'][0])
-        return df[condi]['pressure']
+    def extract_dat(self, df, conditions, columns):
+        for col in columns:
+            condi = (df[col] == conditions[col][0])
+            df = df[condi]
+        return df['pressure']
+
+

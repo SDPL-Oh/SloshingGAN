@@ -85,7 +85,7 @@ class GenerateTfrecord:
 
     def create_tfrecord(self, mode):
         writer = tf.io.TFRecordWriter(os.path.join(self.save_dir + "{}.record".format(mode)))
-        data_info = pd.read_csv(self.csv_file)[:3000]
+        data_info = pd.read_csv(self.csv_file)
         data_info = self.normalized(data_info, data_info).fillna(0)
         for data in tqdm(data_info.itertuples(), desc='generate tfrecord values', total=len(data_info)):
             tf_example = self.create_tfvalue(data)
@@ -101,10 +101,12 @@ class GenerateTfrecord:
 
 
 class LoadTfrecord:
-    def __init__(self, epochs):
+    def __init__(self, epochs, columns):
         self.epochs = epochs
+        self.columns = columns
 
     def read_tfrecord(self, example):
+        sp_inputs = []
         tfrecord_format = ({
             'Index': tf.io.FixedLenFeature((), tf.float32),
             'hs': tf.io.VarLenFeature(tf.float32),
@@ -116,12 +118,9 @@ class LoadTfrecord:
             'pressure': tf.io.VarLenFeature(tf.float32)
         })
         example = tf.io.parse_single_example(example, tfrecord_format)
-        inputs = tf.sparse.concat(axis=0, sp_inputs=[
-            example['hs'],
-            example['tz'],
-            example['speed'],
-            example['heading'],
-            example['loc']])
+        for col in self.columns:
+            sp_inputs.append(example[col])
+        inputs = tf.sparse.concat(axis=0, sp_inputs=sp_inputs)
         inputs = tf.sparse.to_dense(inputs)
         return example['Index'], inputs, example['pressure']
 

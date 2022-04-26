@@ -93,16 +93,17 @@ class Algorithm:
 
     def test(self, csv_file, conditions):
         logic = tf.keras.models.load_model(self.model_path + 'nn/')
-        models = SloshingNN(logic, self.batch_size)
-        plot_data = WeibullDistribution(self.target_columns)
 
-        data_info = pd.read_csv(csv_file)
-        inputs = pd.DataFrame.from_dict(conditions)
-        inputs = plot_data.normalized(inputs, data_info, self.input_columns)
-
-        data = models.predict(inputs)['predict_output']
-        data = pd.DataFrame(data, columns=self.target_columns)
-        data = plot_data.denormalized(data, data_info, self.target_columns)
-
-        raw_data = plot_data.extract_dat(data_info, conditions)
-        plot_data.plot_weibull_scipy(data[self.target_columns[0]][:], raw_data, conditions)
+        # models = SloshingNN(logic, self.batch_size)
+        # plot_data = WeibullDistribution(self.target_columns)
+        #
+        # data_info = pd.read_csv(csv_file)
+        # inputs = pd.DataFrame.from_dict(conditions)
+        # inputs = plot_data.normalized(inputs, data_info, self.input_columns)
+        #
+        # data = models.predict(inputs)['predict_output']
+        # data = pd.DataFrame(data, columns=self.target_columns)
+        # data = plot_data.denormalized(data, data_info, self.target_columns)
+        #
+        # raw_data = plot_data.extract_dat(data_info, conditions)
+        # plot_data.plot_weibull_scipy(data[self.target_columns[0]][:], raw_data, conditions)
