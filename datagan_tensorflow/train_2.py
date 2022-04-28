@@ -188,10 +188,12 @@ class Algorithm:
             raw_data = plot_data.extract_dat(data_info,
                                              inputs.iloc[dat_idx:dat_idx+1].reset_index(),
                                              self.input_columns)
-
             try:
+                end_idx = dat_idx + 1
+                if end_idx == len(inputs):
+                    end_idx = -1
                 parameter = plot_data.plot_weibull_scipy(
-                    data[self.target_columns[0]][:],
+                    data[self.target_columns[0]][self.num_gen_data*dat_idx:self.num_gen_data*(end_idx)],
                     raw_data,
                     inputs.iloc[dat_idx:dat_idx+1],
                     self.logs_path + 'plt/{}'.format(dat_idx))

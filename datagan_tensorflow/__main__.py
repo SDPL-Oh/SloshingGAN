@@ -2,7 +2,7 @@ HParams = {
     'latent': 16,
     'samples': 3900000,
     'batch': 512,
-    'epochs': 100,
+    'epochs': 10,
     'generator_lr': 0.0003,
     'discriminator_lr': 0.0003,
     'decay_steps': 20000,
@@ -41,7 +41,7 @@ def main():
     ################### 학습2 ###################
     from train_2 import Algorithm
     sloshing_gan = Algorithm(HParams)
-    sloshing_gan.train()
+    # sloshing_gan.train()
 
     # conditions = {
     #     'hs': [10.9],
@@ -51,7 +51,7 @@ def main():
     #     'loc': [6]
     # }
     conditions = 'F:/SloshingProject/data/kbg/condition.csv'
-    # sloshing_gan.test(csv_file, conditions)
+    sloshing_gan.test(csv_file, conditions)
 
 if __name__ == '__main__':
     main()
